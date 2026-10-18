@@ -351,6 +351,25 @@ button,.nav-btn,.toggle-switch,label{touch-action:manipulation;-webkit-tap-highl
 /* 押した時の手応え */
 button:active,.nav-btn:active{opacity:.7;transform:scale(.98);transition:transform .05s}
 </style>
+<style>
+/* 教科の絞り込み：1行で横スクロール */
+.subj-scroll{display:flex;flex-wrap:nowrap;align-items:center;gap:4px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:4px;margin-right:-4px}
+.subj-scroll::-webkit-scrollbar{display:none}
+.subj-scroll>*{flex:0 0 auto;white-space:nowrap}
+</style>
+<style>
+/* 並べ替え：▲▼ボタン */
+.sort-item .sort-label{flex:1;min-width:0;word-break:break-word}
+.sort-mv{flex:0 0 auto;width:40px;height:40px;padding:0;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:16px;line-height:1;cursor:pointer}
+.sort-mv:disabled{opacity:.3;cursor:default}
+.sort-mv:active:not(:disabled){background:var(--border)}
+</style>
+<style>
+/* 並べ替え：指でドラッグ */
+.sort-item{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+@media (pointer:coarse){.sort-item{touch-action:none;cursor:default}.sort-item .drag-handle{font-size:22px;padding:0 4px}}
+.sort-item.dragging{opacity:.92;transform:scale(1.02);box-shadow:0 6px 18px rgba(0,0,0,.25);border-color:var(--accent);position:relative;z-index:5}
+</style>
 </head>
 <body>
 <div class="page" id="app"></div>
@@ -1074,8 +1093,8 @@ function vHomeExam(){
   h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:13px;font-weight:700;color:let(--text2)">🔍 絞り込み</span>';
   if(exActiveCount>0)h+='<button class="btn btn-sm btn-r" onclick="resetExamFilters()">✕ リセット ('+exActiveCount+'件)</button>';
   h+='</div>';
-  h+='<div style="margin-bottom:10px"><span class="lbl" style="display:block;margin-bottom:5px">教科<span class="lbl-hint">複数選択可</span></span>';
-  h+='<div class="rrow" style="flex-wrap:wrap;gap:4px">';
+  h+='<div style="margin-bottom:10px"><span class="lbl" style="display:block;margin-bottom:5px">教科<span class="lbl-hint">複数選択可・横にスクロール</span></span>';
+  h+='<div class="rrow subj-scroll">';
   SUBJ_GROUPS.forEach(function(g){
     h+='<span style="font-size:11px;color:let(--text3);align-self:center;margin-right:2px">'+esc(g.label)+':</span>';
     g.items.forEach(function(s){let on=exfSubj.indexOf(s)>=0;h+='<button class="rb'+(on?' on':'')+'" data-subj="'+esc(s)+'" onclick="toggleExfSubj(this.dataset.subj)">'+esc(s)+'</button>';});
@@ -1171,8 +1190,8 @@ function vHomeNormal(){
   h+='</div>';
 
   // ── 教科 ──
-  h+='<div style="margin-bottom:10px"><span class="lbl" style="display:block;margin-bottom:5px">教科<span class="lbl-hint">複数選択可</span></span>';
-  h+='<div class="rrow" style="flex-wrap:wrap;gap:4px">';
+  h+='<div style="margin-bottom:10px"><span class="lbl" style="display:block;margin-bottom:5px">教科<span class="lbl-hint">複数選択可・横にスクロール</span></span>';
+  h+='<div class="rrow subj-scroll">';
   SUBJ_GROUPS.forEach(function(g){
     h+='<span style="font-size:11px;color:let(--text3);align-self:center;margin-right:2px">'+esc(g.label)+':</span>';
     g.items.forEach(function(s){let on=qfSubj.indexOf(s)>=0;h+='<button class="rb'+(on?' on':'')+'" data-subj="'+esc(s)+'" onclick="toggleQfSubj(this.dataset.subj)">'+esc(s)+'</button>';});
@@ -1652,7 +1671,7 @@ function buildActionBtn(q,s){
     // AIエラー中は再試行UIを表示中なので次へボタンを隠す
     if(isAiError)return'';
     // 手動採点で未判定の場合は次へボタンを隠す
-    if(sMode==='manual'&&s.manualJudge===undefined)return'';
+    if(q.type==='text'&&sMode==='manual'&&s.manualJudge===undefined)return'';
     return'<button class="btn btn-p btn-full" onclick="nextQ()">'+(s.cur+1<s.qs.length?'次の問題 →':'結果を見る 🏁')+'</button>';
   }
   if(q.type==='text'){
@@ -1797,7 +1816,7 @@ function vQuiz(){
     if(!s.show){
       let order=s.sortOrder||(q.items?q.items.slice().sort(function(){return Math.random()-.5;}):q.cs.slice().sort(function(){return Math.random()-.5;}));
       if(!s.sortOrder)s.sortOrder=order;
-      h+='<div id="sort-list">';order.forEach(function(item,i){h+='<div class="sort-item" draggable="true" data-idx="'+i+'" ondragstart="sortDragStart(event,'+i+')" ondragover="sortDragOver(event)" ondrop="sortDrop(event,'+i+')"><span class="drag-handle">☰</span>'+esc(item)+'</div>';});h+='</div>';
+      h+='<div id="sort-list">'+sortListHtml(order)+'</div>';
     } else {
       let correct=q.items||q.ans,user=s.sortOrder||[];
       h+='<div>';user.forEach(function(item,i){let ok4=item===correct[i];h+='<div class="sort-item '+(ok4?'correct':'wrong')+'"><span>'+(ok4?'✅':'❌')+'</span>'+esc(item)+'</div>';});h+='</div>';
@@ -2073,11 +2092,7 @@ function vExam(){
       s.ans[n]=order;
     }
     let sortArr=order;
-    h+='<div id="exam-sort-list">';
-    sortArr.forEach(function(item,i){
-      h+='<div class="sort-item" draggable="true" data-sidx="'+i+'" ondragstart="examSortDragStart(event,'+i+')" ondragover="examSortDragOver(event)" ondrop="examSortDrop(event,'+i+')"><span class="drag-handle">☰</span>'+esc(item)+'</div>';
-    });
-    h+='</div>';
+    h+='<div id="exam-sort-list">'+examSortListHtml(sortArr)+'</div>';
   }
   h+='</div>';
 
@@ -2129,7 +2144,7 @@ function examSortDrop(e,i){
   if(examSortDragSrc===null||examSortDragSrc===i)return;
   let arr=Array.isArray(examSess.ans[examSess.cur])?examSess.ans[examSess.cur]:(examSess.qs[examSess.cur].items||examSess.qs[examSess.cur].cs).slice();
   let tmp=arr[examSortDragSrc];arr[examSortDragSrc]=arr[i];arr[i]=tmp;
-  examSess.ans[examSess.cur]=arr;examSortDragSrc=null;saveExamSess();patchExam();
+  examSess.ans[examSess.cur]=arr;examSortDragSrc=null;saveExamSess();let _el=$('exam-sort-list');if(_el)_el.innerHTML=examSortListHtml(arr);patchExam();
 }
 function toggleExamFlag(i){
   if(!examSess)return;
@@ -3349,10 +3364,113 @@ function startQuiz(){
 function reQuiz(){sess={qs:sess.qs.slice().sort(function(){return Math.random()-.5;}),cur:0,pick:null,show:false,recs:{},textRecs:{},textAns:'',numAns:'',numRecs:{},fillRecs:{},fillAns:[],multiRecs:{},multiPick:[],sortRecs:{},sortOrder:null,aiLoading:false,aiResult:null,aiResults:{},csOrder:{}};view='quiz';render();}
 function pickAns(i){if(sess.show)return;sess.pick=i;patchQuiz();}
 function toggleMultiPick(i){if(sess.show)return;if(!sess.multiPick)sess.multiPick=[];let idx=sess.multiPick.indexOf(i);if(idx>=0)sess.multiPick.splice(idx,1);else sess.multiPick.push(i);patchQuiz();}
+
+
+/* ===== 並べ替え：指でドラッグ（Pointer Events） ===== */
+var IS_COARSE=false;
+try{IS_COARSE=!!(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches);}catch(e){}
+(function(){
+  var drag=null;
+  function listArr(list){
+    if(list.id==='sort-list'){return (typeof sess!=='undefined'&&sess&&!sess.show&&Array.isArray(sess.sortOrder))?sess.sortOrder:null;}
+    if(list.id==='exam-sort-list'){
+      if(typeof examSess==='undefined'||!examSess)return null;
+      var a=examSess.ans[examSess.cur];return Array.isArray(a)?a:null;
+    }
+    return null;
+  }
+  document.addEventListener('pointerdown',function(e){
+    if(e.pointerType==='mouse')return;               // マウスは従来のドラッグ＆ドロップ
+    var t=e.target;if(!t||!t.closest)return;
+    if(t.closest('.sort-mv'))return;                 // ▲▼ボタンは通常のタップ
+    var item=t.closest('.sort-item');if(!item)return;
+    var list=item.parentElement;
+    if(!list||(list.id!=='sort-list'&&list.id!=='exam-sort-list'))return;
+    var arr=listArr(list);if(!arr)return;
+    drag={list:list,item:item,arr:arr.slice(),pid:e.pointerId,sx:e.clientX,sy:e.clientY,active:false};
+    try{list.setPointerCapture(e.pointerId);}catch(_){}
+  });
+  document.addEventListener('pointermove',function(e){
+    if(!drag||e.pointerId!==drag.pid)return;
+    if(!drag.active){
+      if(Math.abs(e.clientY-drag.sy)<5&&Math.abs(e.clientX-drag.sx)<5)return;
+      drag.active=true;drag.item.classList.add('dragging');
+    }
+    if(e.cancelable)e.preventDefault();
+    var el=document.elementFromPoint(e.clientX,e.clientY);
+    var target=el&&el.closest?el.closest('.sort-item'):null;
+    if(target&&target!==drag.item&&target.parentElement===drag.list){
+      var kids=Array.prototype.slice.call(drag.list.children);
+      if(kids.indexOf(drag.item)<kids.indexOf(target))drag.list.insertBefore(drag.item,target.nextSibling);
+      else drag.list.insertBefore(drag.item,target);
+    }
+    // 画面の上下端に近づいたら自動スクロール
+    if(e.clientY<70)window.scrollBy(0,-10);
+    else if(e.clientY>window.innerHeight-130)window.scrollBy(0,10);
+  },{passive:false});
+  function finish(e){
+    if(!drag||(e&&e.pointerId!==drag.pid))return;
+    var d=drag;drag=null;
+    try{d.list.releasePointerCapture(d.pid);}catch(_){}
+    d.item.classList.remove('dragging');
+    if(!d.active)return;
+    var newArr=Array.prototype.map.call(d.list.children,function(c){
+      var k=c.getAttribute('data-idx');if(k===null)k=c.getAttribute('data-sidx');
+      return d.arr[parseInt(k,10)];
+    });
+    if(d.list.id==='sort-list'){
+      if(sess&&!sess.show){sess.sortOrder=newArr;d.list.innerHTML=sortListHtml(newArr);}
+    }else if(typeof examSess!=='undefined'&&examSess){
+      examSess.ans[examSess.cur]=newArr;saveExamSess();
+      d.list.innerHTML=examSortListHtml(newArr);
+    }
+  }
+  document.addEventListener('pointerup',finish);
+  document.addEventListener('pointercancel',finish);
+})();
+
+/* ===== 並べ替え問題：タップで上下に動かす（スマホ対応） ===== */
+function sortListHtml(order){
+  let n=order.length,h='';
+  order.forEach(function(item,i){
+    h+='<div class="sort-item"'+(IS_COARSE?'':' draggable="true"')+' data-idx="'+i+'" ondragstart="sortDragStart(event,'+i+')" ondragover="sortDragOver(event)" ondrop="sortDrop(event,'+i+')">'
+      +'<span class="drag-handle">☰</span><span class="sort-label">'+esc(item)+'</span>'
+      +'<button type="button" class="sort-mv" aria-label="上へ" onclick="moveSort('+i+',-1)"'+(i===0?' disabled':'')+'>▲</button>'
+      +'<button type="button" class="sort-mv" aria-label="下へ" onclick="moveSort('+i+',1)"'+(i===n-1?' disabled':'')+'>▼</button></div>';
+  });
+  return h;
+}
+function moveSort(i,d){
+  if(!sess||sess.show)return;
+  let a=sess.sortOrder;if(!a)return;
+  let j=i+d;if(j<0||j>=a.length)return;
+  let t=a[i];a[i]=a[j];a[j]=t;
+  let el=$('sort-list');if(el)el.innerHTML=sortListHtml(a);
+}
+function examSortListHtml(order){
+  let n=order.length,h='';
+  order.forEach(function(item,i){
+    h+='<div class="sort-item"'+(IS_COARSE?'':' draggable="true"')+' data-sidx="'+i+'" ondragstart="examSortDragStart(event,'+i+')" ondragover="examSortDragOver(event)" ondrop="examSortDrop(event,'+i+')">'
+      +'<span class="drag-handle">☰</span><span class="sort-label">'+esc(item)+'</span>'
+      +'<button type="button" class="sort-mv" aria-label="上へ" onclick="moveExamSort('+i+',-1)"'+(i===0?' disabled':'')+'>▲</button>'
+      +'<button type="button" class="sort-mv" aria-label="下へ" onclick="moveExamSort('+i+',1)"'+(i===n-1?' disabled':'')+'>▼</button></div>';
+  });
+  return h;
+}
+function moveExamSort(i,d){
+  if(!examSess)return;
+  let q=examSess.qs[examSess.cur];
+  let arr=Array.isArray(examSess.ans[examSess.cur])?examSess.ans[examSess.cur]:(q.items||q.cs).slice();
+  let j=i+d;if(j<0||j>=arr.length)return;
+  let t=arr[i];arr[i]=arr[j];arr[j]=t;
+  examSess.ans[examSess.cur]=arr;saveExamSess();
+  let el=$('exam-sort-list');if(el)el.innerHTML=examSortListHtml(arr);
+}
+
 let dragSrc=null;
 function sortDragStart(e,i){dragSrc=i;e.dataTransfer.effectAllowed='move';}
 function sortDragOver(e){e.preventDefault();}
-function sortDrop(e,i){e.preventDefault();if(dragSrc===null||dragSrc===i)return;let arr=sess.sortOrder;let tmp=arr[dragSrc];arr[dragSrc]=arr[i];arr[i]=tmp;dragSrc=null;patchQuiz();}
+function sortDrop(e,i){e.preventDefault();if(dragSrc===null||dragSrc===i)return;let arr=sess.sortOrder;let tmp=arr[dragSrc];arr[dragSrc]=arr[i];arr[i]=tmp;dragSrc=null;let _sl=$('sort-list');if(_sl)_sl.innerHTML=sortListHtml(arr);patchQuiz();}
 function recordStat(q,correct){
   let id=q._id;if(!id)return;
   if(!STATS[id])STATS[id]={total:0,wrong:0};
