@@ -370,13 +370,18 @@ button:active,.nav-btn:active{opacity:.7;transform:scale(.98);transition:transfo
 @media (pointer:coarse){.sort-item{touch-action:none;cursor:default}.sort-item .drag-handle{font-size:22px;padding:0 4px}}
 .sort-item.dragging{opacity:.92;transform:scale(1.02);box-shadow:0 6px 18px rgba(0,0,0,.25);border-color:var(--accent);position:relative;z-index:5}
 </style>
+<style>
+/* 問題バンク：操作ボタンを縦並びに */
+.bank-act{display:flex;flex-direction:column;gap:4px;flex-shrink:0;width:58px}
+.bank-act .btn{width:100%;margin:0;text-align:center;padding-left:4px;padding-right:4px}
+</style>
 </head>
 <body>
 <div class="page" id="app"></div>
 <input type="file" id="import-file" accept=".json" style="display:none" onchange="importJSON(this.files[0]);this.value=''">
 <script>
 /* ===== アプリ定数（マジック文字列を一箇所に集約） ===== */
-const APP_VERSION = '5.1';
+const APP_VERSION = '6.0';
 const DB_NAME     = 'quiz_db';
 const DB_VERSION  = 4;
 const AI_MODEL    = 'claude-sonnet-4-20250514';
@@ -1346,7 +1351,7 @@ function vBank(){
   // 検索・フィルタ行
   h+='<input placeholder="全文検索（問題文・解説・選択肢・タグ）..." value="'+esc(fsrch)+'" oninput="fsrch=this.value;render()" style="margin-top:0;margin-bottom:8px">';
   h+='<div style="margin-bottom:8px">';
-  h+='<div class="rrow" style="flex-wrap:wrap;gap:4px">';
+  h+='<div class="rrow subj-scroll">';
   SUBJ_GROUPS.forEach(function(g){
     h+='<span style="font-size:11px;color:let(--text3);align-self:center;margin-right:2px">'+esc(g.label)+':</span>';
     g.items.forEach(function(s){let on=fsubj.indexOf(s)>=0;h+='<button class="rb'+(on?' on':'')+'" data-subj="'+esc(s)+'" onclick="toggleFsubj(this.dataset.subj)">'+esc(s)+'</button>';});
@@ -1365,10 +1370,10 @@ function vBank(){
     let isDraggable=fsort==='manual';
     let isBM=!!BOOKMARKS[q._id];
     h+='<div class="qi" '+(isDraggable?'draggable="true" data-qidx="'+i+'"':'')+' id="qi-'+i+'">';
-    h+='<div class="row"><div style="display:flex;align-items:flex-start;gap:6px;flex:1;min-width:0">';
+    h+='<div class="row" style="align-items:flex-start"><div style="display:flex;align-items:flex-start;gap:6px;flex:1;min-width:0">';
     if(isDraggable)h+='<span class="drag-bank-handle" title="ドラッグして並び替え">☰</span>';
     h+='<div style="font-size:14px;flex:1;line-height:1.8;margin-right:8px">'+renderMath(q.q)+'</div></div>';
-    h+='<div style="display:flex;gap:4px;flex-shrink:0">';
+    h+='<div class="bank-act">';
     h+='<button class="btn btn-sm" onclick="toggleBookmark(\''+q._id+'\')" title="'+(isBM?'ブックマーク解除':'ブックマーク')+'" style="font-size:15px;padding:4px 8px">'+(isBM?'🔖':'🔖')+'</button>';
     h+='<button class="btn btn-sm btn-g" onclick="copyQ('+i+')" title="コピー">📋</button><button class="btn btn-sm" onclick="openEdit('+i+')">編集</button><button class="btn btn-sm btn-r" onclick="delQ('+i+')">削除</button></div></div>';
     getQImgs(q).forEach(function(src){h+='<img src="'+src+'" class="img-preview" style="max-height:80px">';});
