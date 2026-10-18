@@ -1,14 +1,14 @@
 // 大学受験対策クイズ Service Worker（オフライン対応）
 // index.html などを更新したら、下の VERSION を変えるとキャッシュが入れ替わります
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = 'quiz-app-' + VERSION;
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/icon-maskable-512.png'
+  './icon-192.png',
+  './icon-512.png',
+  './icon-maskable-512.png'
 ];
 
 self.addEventListener('install', (e) => {
