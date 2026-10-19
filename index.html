@@ -377,13 +377,33 @@ button:active,.nav-btn:active{opacity:.7;transform:scale(.98);transition:transfo
 .bank-act{display:flex;flex-direction:column;gap:4px;flex-shrink:0;width:58px}
 .bank-act .btn{width:100%;margin:0;text-align:center;padding-left:4px;padding-right:4px}
 </style>
+<style>
+/* 一括インポート */
+.bulk-help{font-size:12px;color:var(--text3);margin-bottom:8px}
+.bulk-help summary{cursor:pointer;font-weight:600;color:var(--text2);margin-bottom:6px}
+.bulk-help pre{white-space:pre-wrap;word-break:break-word;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px;line-height:1.7;margin:6px 0;max-height:260px;overflow:auto;font-size:11.5px;font-family:inherit}
+.bulk-report{white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.7;border-radius:8px;padding:8px 10px;margin:8px 0;max-height:180px;overflow:auto}
+.bulk-report.err{background:var(--ng-bg);color:var(--ng-text);border:1px solid var(--ng-border)}
+.bulk-report.ok{background:var(--ok-bg);color:var(--ok-text);border:1px solid var(--ok-border)}
+.bulk-actions{flex-wrap:wrap}
+.bulk-actions .btn{white-space:nowrap;padding-left:12px;padding-right:12px}
+</style>
+<style>
+/* 背景色の設定 */
+.bg-swatches{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+.bg-swatch{width:38px;height:38px;border-radius:50%;border:2px solid var(--border);padding:0;cursor:pointer;position:relative;display:inline-flex;align-items:center;justify-content:center;font-size:17px;line-height:1;margin:0;box-sizing:border-box}
+.bg-swatch.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--bg2),0 0 0 4px var(--accent)}
+.bg-custom{background:conic-gradient(#f66,#fd6,#7d7,#6dd,#68f,#d6d,#f66);overflow:hidden}
+.bg-custom input[type=color]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;margin:0}
+.bg-warn{font-size:12px;color:var(--ng-text);margin-top:8px}
+</style>
 </head>
 <body>
 <div class="page" id="app"></div>
 <input type="file" id="import-file" accept=".json" style="display:none" onchange="importJSON(this.files[0]);this.value=''">
 <script>
 /* ===== アプリ定数（マジック文字列を一箇所に集約） ===== */
-const APP_VERSION = '6.5';
+const APP_VERSION = '7.2';
 const DB_NAME     = 'quiz_db';
 const DB_VERSION  = 4;
 const AI_MODEL    = 'claude-sonnet-4-20250514';
@@ -394,12 +414,12 @@ let Q=[], view='home', mod=null, editIdx=null, sess=null;
 let examSess=null, examInterval=null;
 let fsubj=[], fsrch='', fsort='date', fquizCount=null; // null=全問
 let ftagInput='', STATS={}, DAILY={}, BOOKMARKS={}, bulkTab='text';
-let FORM_DECK, FORM_BACKUP=null, bulkText='';
+let FORM_DECK, FORM_BACKUP=null, bulkText='', bulkReport=null;
 /* ===== 試験モード用フィルタ ===== */
 let exfSubj=[], exfDiff='', exfTypes=[], exfAiScoring='', exfBookmark=false, exfWeak=false, exfSRS=false, exfDeckIds=[], exfTags=[], exfCustomCount='', fexamCount=10, fexamTimeSec=1800;
 /* ===== 通常クイズ 詳細フィルタ ===== */
 let qfSubj=[], qfDiff='', qfTags=[], qfAiScoring='', qfTypes=[], qfBookmark=false, qfWeak=false, qfCustomCount='', qfSRS=false, qfDeckIds=[];
-let SETTINGS={dark:false,fontSize:'medium',timerSec:0,timerEnabled:false};
+let SETTINGS={dark:false,fontSize:'medium',timerSec:0,timerEnabled:false,bgLight:'',bgDark:''};
 let fbookmarkOnly=false, fsortRev=false;
 let calViewYear=null, calViewMonth=null;
 
@@ -438,8 +458,8 @@ const SUBJ_GROUPS=[
   {label:'数学',items:['数学Ⅰ・A','数学Ⅱ・B','数学Ⅲ・C']},
   {label:'英語',items:['英語（読解）','英語（文法）','英語（リスニング）']},
   {label:'理科',items:['物理基礎','物理','化学基礎','化学','生物基礎','生物','地学基礎','地学']},
-  {label:'地歴・公民',items:['日本史','世界史','地理','倫理','政治・経済','倫理・政治経済']},
-  {label:'情報・その他',items:['情報Ⅰ','情報Ⅱ','総合','その他']}
+  {label:'地歴・公民',items:['日本史','世界史','地理','倫理','政治・経済','公共','地理総合','歴史総合']},
+  {label:'情報・その他',items:['情報Ⅰ','その他']}
 ];
 const DIFF=['基礎','標準','応用','難関'];
 const ABC='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -669,7 +689,50 @@ function clearFormError(){
 function applySettings(){
   document.documentElement.setAttribute('data-theme',SETTINGS.dark?'dark':'light');
   document.documentElement.setAttribute('data-fontsize',SETTINGS.fontSize||'medium');
-  try{var tc=document.querySelector('meta[name="theme-color"]');if(tc)tc.setAttribute('content',SETTINGS.dark?'#0f0f0f':'#f5f5f5');}catch(e){}
+  // 背景色（ライト／ダークで別々に保存）。未設定なら標準の色
+  let bgc=bgCurrent();
+  if(bgHexOk(bgc))document.documentElement.style.setProperty('--bg',bgc);
+  else document.documentElement.style.removeProperty('--bg');
+  try{var tc=document.querySelector('meta[name="theme-color"]');if(tc)tc.setAttribute('content',bgHexOk(bgc)?bgc:bgDefault());}catch(e){}
+}
+/* ===== 背景色の設定 ===== */
+const BG_PRESETS={
+  light:[['標準','#f5f5f5'],['白','#ffffff'],['アイボリー','#fbf6e9'],['セピア','#f3ead8'],['ミント','#eaf5ee'],['ブルー','#eaf1fb'],['ピンク','#fbeef0'],['ラベンダー','#f0ecfa'],['グレー','#e3e6ea']],
+  dark:[['標準','#0f0f0f'],['黒','#000000'],['ネイビー','#0d1524'],['フォレスト','#0e1a14'],['ブラウン','#1a140f'],['パープル','#16101f'],['スレート','#1b2128']]
+};
+let _bgSaveTimer=null;
+function bgDefault(){return SETTINGS.dark?'#0f0f0f':'#f5f5f5';}
+function bgCurrent(){return(SETTINGS.dark?SETTINGS.bgDark:SETTINGS.bgLight)||'';}
+function bgHexOk(c){return /^#[0-9a-f]{6}$/i.test(c||'');}
+function bgContrast(hex){
+  function lum(h){let v=[1,3,5].map(function(i){let x=parseInt(h.slice(i,i+2),16)/255;return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);});return 0.2126*v[0]+0.7152*v[1]+0.0722*v[2];}
+  let a=lum(hex),b=lum(SETTINGS.dark?'#e8e8e8':'#111111');
+  return(Math.max(a,b)+0.05)/(Math.min(a,b)+0.05);
+}
+// final=true: 選び終わり（画面を更新）。false: 色選びの途中（カラーピッカーを閉じないよう画面は更新しない）
+function setBgColor(c,final){
+  c=bgHexOk(c)?String(c).toLowerCase():'';
+  if(c===bgDefault())c='';
+  if(SETTINGS.dark)SETTINGS.bgDark=c;else SETTINGS.bgLight=c;
+  applySettings();
+  clearTimeout(_bgSaveTimer);
+  _bgSaveTimer=setTimeout(function(){dbSet('quiz_settings',SETTINGS);showSaveIndicator();},300);
+  if(final)render();
+}
+function bgSettingsHtml(){
+  let presets=SETTINGS.dark?BG_PRESETS.dark:BG_PRESETS.light;
+  let eff=bgHexOk(bgCurrent())?bgCurrent():bgDefault();
+  let isPreset=presets.some(function(p){return p[1]===eff;});
+  let h='<div style="margin-top:12px"><span class="lbl">背景色<span class="lbl-hint">'+(SETTINGS.dark?'ダークモード用':'ライトモード用')+'（モードごとに覚えます）</span></span><div class="bg-swatches">';
+  presets.forEach(function(p){
+    h+='<button type="button" class="bg-swatch'+(eff===p[1]?' on':'')+'" style="background:'+p[1]+'" title="'+p[0]+'" aria-label="'+p[0]+'" onclick="setBgColor(\''+p[1]+'\',true)"></button>';
+  });
+  h+='<label class="bg-swatch bg-custom'+(!isPreset?' on':'')+'" title="好きな色を選ぶ">🎨<input type="color" id="bg-color-input" value="'+eff+'" oninput="setBgColor(this.value,false)" onchange="setBgColor(this.value,true)"></label>';
+  h+='</div>';
+  if(bgContrast(eff)<4.5)h+='<div class="bg-warn">⚠️ この背景色だと文字が読みにくいかもしれません</div>';
+  if(bgHexOk(bgCurrent()))h+='<div style="margin-top:8px"><button type="button" class="btn btn-sm" onclick="setBgColor(\'\',true)">標準に戻す</button></div>';
+  h+='</div>';
+  return h;
 }
 function toggleDark(){SETTINGS.dark=!SETTINGS.dark;applySettings();saveData();render();}
 function setFontSize(s){SETTINGS.fontSize=s;applySettings();saveData();render();}
@@ -756,25 +819,77 @@ function assignDeck(qId,deckId){
 function getDeckQuestions(deckId){return Q.filter(function(q){return Q_DECKS[q._id]===deckId;});}
 function triggerImport(){let el=document.getElementById('import-file');if(el)el.click();}
 function exportJSON(){
-  let data={version:5,questions:Q,stats:STATS,daily:DAILY,srs:SRS,decks:DECKS,qDecks:Q_DECKS};
+  let data={version:6,appVersion:APP_VERSION,exportedAt:new Date().toISOString(),questions:Q,stats:STATS,daily:DAILY,srs:SRS,decks:DECKS,qDecks:Q_DECKS,bookmarks:BOOKMARKS};
   let blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   let url=URL.createObjectURL(blob);let a=document.createElement('a');
   let now=new Date();let ts=now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0');
   a.href=url;a.download='quiz_'+ts+'.json';a.click();URL.revokeObjectURL(url);
+}
+/* 取り込む問題を、いまのアプリが扱える形に整える（古いファイルや項目が欠けたファイルでも落ちないように）。
+   使えない問題は null を返して除外する。教科などの値は書き換えない（足りないものだけ補う）。 */
+function normalizeImportedQuestion(q){
+  if(!q||typeof q!=='object'||Array.isArray(q))return null;
+  if(q.q==null||!String(q.q).trim())return null;
+  q.q=String(q.q);
+  let types=['choice','multi','text','sort','number','fill'];
+  if(types.indexOf(q.type)<0){
+    if(Array.isArray(q.items))q.type='sort';
+    else if(Array.isArray(q.cs)&&Array.isArray(q.ans))q.type='multi';
+    else if(Array.isArray(q.cs))q.type='choice';
+    else if(typeof q.ans==='string')q.type='text';
+    else q.type='choice';
+  }
+  if(q.type==='choice'||q.type==='multi'){
+    if(!Array.isArray(q.cs)||q.cs.length<2)return null;
+    if(q.type==='choice'&&typeof q.ans!=='number')q.ans=0;
+    if(q.type==='multi'&&!Array.isArray(q.ans))q.ans=(typeof q.ans==='number')?[q.ans]:[];
+  }else if(q.type==='sort'){
+    if(!Array.isArray(q.items))q.items=Array.isArray(q.ans)?q.ans.slice():[];
+    if(q.items.length<2)return null;
+    if(!Array.isArray(q.ans))q.ans=q.items.slice();
+  }else if(q.type==='text'){
+    if(q.ans==null)q.ans='';
+    if(!Array.isArray(q.altAns))q.altAns=[];
+  }
+  if(typeof q.subj!=='string'||!q.subj)q.subj='その他';
+  if(DIFF.indexOf(q.diff)<0)q.diff='標準';
+  q.tags=Array.isArray(q.tags)?q.tags.filter(function(t){return typeof t==='string'&&t;}):[];
+  if(typeof q.expl!=='string')q.expl='';
+  if(typeof q.img!=='string')q.img='';
+  ['imgs','explImgs','csImgs','ttsTurns'].forEach(function(k){if(!Array.isArray(q[k]))q[k]=[];});
+  if(['none','q','both'].indexOf(q.vertical)<0)q.vertical='none';
+  if(q._id==null||q._id==='')q._id=newId();
+  return q;
 }
 function importJSON(file){
   if(!file)return;let r=new FileReader();
   r.onload=function(e){
     try{
       let data=JSON.parse(e.target.result);
-      let imported=Array.isArray(data)?data:(data.questions||[]);
-      let importedStats=data.stats||{};let importedDaily=data.daily||{};
-      let importedSRS=data.srs||{};let importedDecks=data.decks||{};let importedQDecks=data.qDecks||{};
-      if(!imported.length){showToast('問題が見つかりませんでした','ng');return;}
-      let mode=confirm('OK → 追加　キャンセル → 上書き');
-      if(mode){let existIds=Q.map(function(q){return q._id;});imported.forEach(function(q){if(!q._id||existIds.indexOf(q._id)<0){if(!q._id)q._id=newId();Q.push(q);}});Object.assign(STATS,importedStats);Object.assign(DAILY,importedDaily);Object.assign(SRS,importedSRS);Object.assign(DECKS,importedDecks);Object.assign(Q_DECKS,importedQDecks);}
-      else{Q=imported.map(function(q){if(!q._id)q._id=newId();return q;});STATS=importedStats;DAILY=importedDaily;SRS=importedSRS;DECKS=importedDecks;Q_DECKS=importedQDecks;}
-      saveData();mod=null;render();showToast(imported.length+'問をインポートしました！','ok');
+      let meta=(data&&typeof data==='object'&&!Array.isArray(data))?data:{};
+      let raw=Array.isArray(data)?data:(Array.isArray(meta.questions)?meta.questions:[]);
+      let imported=[],skipped=0;
+      raw.forEach(function(q){let n=normalizeImportedQuestion(q);if(n)imported.push(n);else skipped++;});
+      if(!imported.length){showToast('取り込める問題が見つかりませんでした','ng');return;}
+      let obj=function(v){return(v&&typeof v==='object'&&!Array.isArray(v))?v:{};};
+      let iStats=obj(meta.stats),iDaily=obj(meta.daily),iSRS=obj(meta.srs),iDecks=obj(meta.decks),iQDecks=obj(meta.qDecks),iBM=obj(meta.bookmarks);
+      let append=confirm(imported.length+'問が見つかりました。\n\nOK → いまのデータに「追加」します\nキャンセル → 次の確認へ');
+      if(!append){
+        if(!confirm('いまのデータをすべて消して、このファイルの内容に「置き換え」ますか？\n（元に戻せません。先にエクスポートしておくと安心です）\n\nOK → 置き換える\nキャンセル → 何もしない'))return;
+      }
+      let note='';
+      if(append){
+        let exist={};Q.forEach(function(q){exist[q._id]=1;});
+        let added=0,dup=0;
+        imported.forEach(function(q){if(exist[q._id]){dup++;return;}exist[q._id]=1;Q.push(q);added++;});
+        Object.assign(STATS,iStats);Object.assign(DAILY,iDaily);Object.assign(SRS,iSRS);Object.assign(DECKS,iDecks);Object.assign(Q_DECKS,iQDecks);Object.assign(BOOKMARKS,iBM);
+        note=added+'問を追加しました'+(dup?'（'+dup+'問は取り込み済みのためスキップ）':'');
+      }else{
+        Q=imported;STATS=iStats;DAILY=iDaily;SRS=iSRS;DECKS=iDecks;Q_DECKS=iQDecks;BOOKMARKS=iBM;
+        note=imported.length+'問に置き換えました';
+      }
+      if(skipped)note+='（読み取れない'+skipped+'件は除外）';
+      saveData();mod=null;render();showToast(note,'ok');
     }catch(ex){showToast('読み込み失敗: '+ex.message,'ng');}
   };r.readAsText(file);
 }
@@ -948,38 +1063,262 @@ function renderTateOpt(id, dispLabel, content, cls, onclick, disabled){
     '</button>';
 }
 
-/* ===== Bulk import ===== */
-function parseBulkText(text){
-  let blocks=text.trim().split(/\n\s*\n/),results=[];
-  blocks.forEach(function(block){
-    let lines=block.trim().split('\n'),q='',cs=[],ans=0,expl='';
-    lines.forEach(function(line){
-      let m;
-      if((m=line.match(/^Q[：:]\s*(.+)/i)))q=m[1].trim();
-      else if((m=line.match(/^([A-H])[：:]\s*(.+)/i))){let idx=ABC.indexOf(m[1].toUpperCase());if(idx>=0){while(cs.length<idx)cs.push('');cs[idx]=m[2].trim();}}
-      else if((m=line.match(/^ANS[：:]\s*([A-H])/i)))ans=ABC.indexOf(m[1].toUpperCase());
-      else if((m=line.match(/^EXPL[：:]\s*(.+)/i)))expl=m[1].trim();
-    });
-    if(q&&cs.filter(Boolean).length>=2)results.push({q:q,type:'choice',cs:cs,ans:ans>=0?ans:0,expl:expl,subj:'その他',diff:'標準',tags:[],img:'',aiScoring:false,scoringPoint:'',_id:newId()});
-  });
-  return results;
+/* ===== 一括インポート（全形式対応） ===== */
+const BULK_ALIASES={
+  q:['q','問題','問','問題文','question'],
+  type:['type','形式','種類','タイプ','問題形式'],
+  ans:['ans','answer','正解','答え','解答','模範解答','回答'],
+  expl:['expl','explanation','解説','説明'],
+  subj:['subj','subject','教科','科目'],
+  diff:['diff','difficulty','難易度','レベル'],
+  tags:['tags','tag','タグ'],
+  alt:['alt','altans','別解','別答','別解答'],
+  items:['items','item','項目','並べ替え項目','並び替え項目','順序','正しい順序'],
+  scoring:['scoring','採点','採点方式','採点モード'],
+  point:['point','keywords','keyword','採点ポイント','採点基準','キーワード'],
+  vertical:['vertical','縦書き','表示方向'],
+  deck:['deck','デッキ'],
+  ttslang:['ttslang','読み上げ言語','言語'],
+  ttsrate:['ttsrate','読み上げ速度','速度'],
+  ttspause:['ttspause','読み上げ間隔','間隔'],
+  ttsoff:['ttsoff','読み上げなし','読み上げ無効','読み上げ停止'],
+  tts:['tts','読み上げ','読み上げ文']
+};
+const BULK_KEYMAP=(function(){let m={};Object.keys(BULK_ALIASES).forEach(function(k){BULK_ALIASES[k].forEach(function(a){m[a]=k;});});return m;})();
+const BULK_TYPES={choice:'choice','選択':'choice','選択式':'choice','単一選択':'choice','択一':'choice',multi:'multi','複数':'multi','複数選択':'multi',text:'text','記述':'text','記述式':'text',sort:'sort','並べ替え':'sort','並び替え':'sort'};
+// 問題作成画面にない形式（作ると編集できなくなるため、一括インポートでは作らない）
+const BULK_UNSUPPORTED_TYPES={number:1,'数値':1,'数':1,fill:1,'穴埋め':1,'空欄補充':1};
+const BULK_TYPE_LABEL={choice:'選択',multi:'複数選択',text:'記述',sort:'並べ替え'};
+function bulkNormKey(s){return String(s==null?'':s).normalize('NFKC').replace(/[（(].*?[)）]/g,'').toLowerCase().replace(/[\s_\-・]/g,'');}
+function bulkFieldKey(raw){
+  let k=bulkNormKey(raw);
+  if(BULK_KEYMAP[k])return BULK_KEYMAP[k];
+  let m=k.replace(/^(選択肢|choice|option|opt)/,'');
+  if(/^[a-p]$/.test(m))return 'c:'+m.toUpperCase();
+  return '';
 }
-function parseBulkCSV(text){
-  let lines=text.trim().split('\n'),results=[];
+function bulkLetters(s){
+  let out=[];
+  String(s==null?'':s).normalize('NFKC').toUpperCase().split('').forEach(function(ch){if(/[A-P]/.test(ch)&&out.indexOf(ch)<0)out.push(ch);});
+  return out;
+}
+function bulkItems(v){
+  v=String(v||'').trim();if(!v)return[];
+  let parts=v.indexOf('\n')>=0?v.split('\n'):v.split(/[|｜]/);
+  return parts.map(function(s){return s.replace(/^\s*(?:[-*・•]|\d+[.)．、）]|[①-⑩])\s*/,'').trim();}).filter(Boolean);
+}
+function bulkScoringOf(v){
+  let k=bulkNormKey(v);
+  if(k==='manual'||k==='手動'||k==='自己採点')return 'manual';
+  if(k==='keyword'||k==='kw'||k==='キーワード')return 'keyword';
+  if(k==='ai'||k==='aiscoring'||k==='ai採点')return 'ai';
+  return '';
+}
+function bulkBool(v){return /^(true|yes|on|1|はい|する|あり|○|〇|有効|使わない|なし)$/i.test(String(v||'').normalize('NFKC').trim());}
+function bulkDiffOf(v){
+  let k=bulkNormKey(v);
+  let map={'基礎':'基礎','易しい':'基礎','やさしい':'基礎','易':'基礎','easy':'基礎','標準':'標準','普通':'標準','ふつう':'標準','medium':'標準','応用':'応用','やや難':'応用','hard':'応用','難関':'難関','難しい':'難関','難':'難関','expert':'難関'};
+  return map[k]||'';
+}
+function bulkBuild(f,ttsLines){
+  let warn=[];
+  function gv(k){return String(f[k]==null?'':f[k]).trim();}
+  let q=gv('q');if(!q)return{err:'問題文（Q:）がありません'};
+  let csMap={};
+  Object.keys(f).forEach(function(k){if(k.indexOf('c:')===0){let v=gv(k);if(v)csMap[k.slice(2)]=v;}});
+  let present=Object.keys(csMap).sort();
+  let t=gv('type')?(BULK_TYPES[bulkNormKey(gv('type'))]||''):'';
+  if(gv('type')&&!t){
+    if(BULK_UNSUPPORTED_TYPES[bulkNormKey(gv('type'))])return{err:'形式「'+gv('type')+'」は、問題作成画面にない形式のため一括インポートでは作れません（choice / multi / text / sort が使えます）'};
+    return{err:'形式「'+gv('type')+'」が分かりません（choice / multi / text / sort）'};
+  }
+  if(!t){
+    if(gv('items'))t='sort';
+    else if(present.length)t=bulkLetters(gv('ans')).length>1?'multi':'choice';
+    else if(gv('ans'))t='text';
+    else return{err:'形式を判断できません（TYPE: を書くか、選択肢・正解・項目などを書いてください）'};
+  }
+  let obj;
+  if(t==='choice'||t==='multi'){
+    if(present.length<2)return{err:'選択肢が2つ以上必要です（A: ... B: ... の形で書きます）'};
+    let cs=[];
+    for(let i=0;i<present.length;i++){
+      if(present[i]!==ABC[i])return{err:'選択肢'+ABC[i]+'がありません（'+present.join('・')+' だけがあります）'};
+      cs.push(csMap[present[i]]);
+    }
+    let L=bulkLetters(gv('ans')),ansRaw=gv('ans').normalize('NFKC');
+    if(t==='choice'){
+      if(L.length>1)return{err:'正解が複数あります。複数選択の問題にするには TYPE: multi と書いてください'};
+      let idx=-1;
+      if(L.length===1)idx=ABC.indexOf(L[0]);
+      else if(/^\d+$/.test(ansRaw))idx=parseInt(ansRaw,10)-1;
+      if(idx<0||idx>=cs.length)return{err:'正解（ANS:）が選択肢の範囲にありません（'+(gv('ans')||'未指定')+'）'};
+      obj={cs:cs,ans:idx};
+    }else{
+      let idxs=L.map(function(x){return ABC.indexOf(x);});
+      if(!idxs.length)return{err:'正解（ANS: A, C のように）がありません'};
+      if(idxs.some(function(i){return i>=cs.length;}))return{err:'正解が選択肢の範囲にありません（'+gv('ans')+'）'};
+      idxs.sort(function(a,b){return a-b;});
+      obj={cs:cs,ans:idxs};
+    }
+  }else if(t==='text'){
+    let ans=gv('ans');if(!ans)return{err:'模範解答（ANS:）がありません'};
+    let alt=gv('alt')?gv('alt').split(/[|｜\n]+/).map(function(s){return s.trim();}).filter(Boolean):[];
+    let sm=gv('scoring')?bulkScoringOf(gv('scoring')):'manual';
+    if(!sm)return{err:'採点「'+gv('scoring')+'」が分かりません（manual / keyword / ai）'};
+    let sp=gv('point');
+    if(sm==='keyword'&&!sp)return{err:'キーワード採点にはキーワード（POINT:）が必要です'};
+    obj={ans:ans,altAns:alt,aiScoring:sm==='ai',scoringMode:sm,scoringPoint:sp};
+  }else if(t==='sort'){
+    let items=bulkItems(gv('items'));
+    if(items.length<2||items.length>8)return{err:'並べ替えの項目は2〜8個です（現在'+items.length+'個。ITEMS: に正しい順で書いてください）'};
+    obj={items:items,ans:items.slice()};
+  }
+  // 教科
+  let subj='その他',sraw=gv('subj');
+  if(sraw){
+    let hit=null;
+    SUBJ_GROUPS.forEach(function(gp){gp.items.forEach(function(s){if(bulkNormKey(s)===bulkNormKey(sraw))hit=s;});});
+    if(hit)subj=hit;else warn.push('教科「'+sraw+'」は一覧にないため「その他」にしました');
+  }
+  // 難易度
+  let diff='標準',draw=gv('diff');
+  if(draw){let d=bulkDiffOf(draw);if(d)diff=d;else warn.push('難易度「'+draw+'」が分からないため「標準」にしました');}
+  // タグ
+  let tags=[];
+  if(gv('tags'))gv('tags').split(/[,，、;；|｜\s]+/).forEach(function(s){s=s.replace(/^#/,'').trim();if(s&&tags.indexOf(s)<0)tags.push(s);});
+  // 表示方向
+  let vertical='none',vraw=gv('vertical');
+  if(vraw){
+    let vk=bulkNormKey(vraw),vmap={none:'none','横':'none','横書き':'none',q:'q','問題':'q','問題のみ':'q','縦':'q','縦書き':'q','問題文のみ縦書き':'q',both:'both','全て':'both','選択肢':'both','問題と選択肢':'both','問題文＋選択肢縦書き':'both'};
+    if(vmap[vk])vertical=vmap[vk];else warn.push('表示方向「'+vraw+'」が分からないため横書きにしました（none / q / both）');
+  }
+  // 読み上げ
+  let ttsLang='ja-JP',lraw=gv('ttslang');
+  if(lraw){
+    let lk=lraw.normalize('NFKC').toLowerCase().replace(/[\s_\-()（）]/g,''),lmap={'日本語':'ja-JP','ja':'ja-JP','jajp':'ja-JP','英語':'en-US','英語us':'en-US','en':'en-US','enus':'en-US','英語uk':'en-GB','engb':'en-GB','uk':'en-GB'};
+    if(lmap[lk])ttsLang=lmap[lk];else warn.push('読み上げ言語「'+lraw+'」が分からないため日本語にしました');
+  }
+  let ttsRate=1.0;
+  if(gv('ttsrate')){let r=parseFloat(gv('ttsrate').normalize('NFKC'));if(isNaN(r))warn.push('読み上げ速度が読み取れないため1.0にしました');else ttsRate=Math.round(Math.min(2,Math.max(0.5,r))*10)/10;}
+  let ttsPause=0;
+  if(gv('ttspause')){let r=parseFloat(gv('ttspause').normalize('NFKC'));if(isNaN(r))warn.push('読み上げ間隔が読み取れないため0にしました');else ttsPause=Math.round(Math.min(5,Math.max(0,r))*2)/2;}
+  let ttsDisabled=gv('ttsoff')?bulkBool(gv('ttsoff')):false;
+  let turns=[];
+  if(!ttsDisabled)(ttsLines||[]).forEach(function(line){
+    line=String(line||'').trim();if(!line)return;
+    let sp='female_a',text=line,m=line.match(/^(女性[ABＡＢ]|男性[ABＡＢ]|female_?[ab]|male_?[ab])\s*[:：]\s*([\s\S]*)$/i);
+    if(m){
+      let sk=m[1].normalize('NFKC').toLowerCase().replace('_',''),smap={'女性a':'female_a','女性b':'female_b','男性a':'male_a','男性b':'male_b','femalea':'female_a','femaleb':'female_b','malea':'male_a','maleb':'male_b'};
+      sp=smap[sk]||'female_a';text=m[2].trim();
+    }
+    if(text)turns.push({speaker:sp,text:text});
+  });
+  let base={q:q,type:t,expl:gv('expl'),subj:subj,diff:diff,tags:tags,img:'',imgs:[],explImgs:[],aiScoring:false,scoringPoint:'',ttsText:'',ttsLang:ttsLang,ttsRate:ttsRate,ttsPause:ttsPause,ttsDisabled:ttsDisabled,ttsTurns:turns,csImgs:[],vertical:vertical};
+  let out=Object.assign(base,obj);
+  out._id=newId();
+  return{q:out,deck:gv('deck'),warn:warn};
+}
+// テキスト形式を「問題ごとの項目」に分解
+function bulkTextBlocks(text){
+  let lines=String(text).replace(/\r\n?/g,'\n').split('\n'),blocks=[],cur=null,lastKey=null;
+  function start(li){cur={line:li+1,f:{},tts:[]};blocks.push(cur);lastKey=null;}
   lines.forEach(function(line,li){
-    if(li===0&&line.match(/問題|question/i))return;
-    let cols=line.split(',').map(function(c){return c.trim().replace(/^"|"$/g,'');});
-    if(cols.length<3)return;
-    let q=cols[0],cs=[],ansCol=-1;
-    for(let i=cols.length-1;i>=1;i--){if(/^[A-H]$/.test(cols[i].trim())){ansCol=i;break;}}
-    if(ansCol<0)return;
-    for(let i=1;i<ansCol;i++)if(cols[i])cs.push(cols[i]);
-    let ans=ABC.indexOf(cols[ansCol].trim().toUpperCase());
-    let expl=ansCol+1<cols.length?cols[ansCol+1]:'';
-    if(q&&cs.length>=2)results.push({q:q,type:'choice',cs:cs,ans:ans>=0?ans:0,expl:expl,subj:'その他',diff:'標準',tags:[],img:'',aiScoring:false,scoringPoint:'',_id:newId()});
+    if(/^\s*(-{3,}|={3,}|\*{3,})\s*$/.test(line)){cur=null;lastKey=null;return;}
+    let m=line.match(/^\s*([^\s:：][^:：]{0,30}?)\s*[:：]\s?(.*)$/);
+    let key=m?bulkFieldKey(m[1]):'';
+    if(key){
+      if(!cur)start(li);
+      else if(key!=='tts'&&cur.f[key]!==undefined)start(li);   // 同じ項目がもう一度出たら次の問題
+      if(key==='tts'){cur.tts.push(m[2]);lastKey='tts';}
+      else{cur.f[key]=m[2];lastKey=key;}
+      return;
+    }
+    if(cur&&lastKey){   // 前の項目の続き（複数行）
+      if(lastKey==='tts')cur.tts[cur.tts.length-1]+='\n'+line;
+      else cur.f[lastKey]+='\n'+line;
+    }
   });
-  return results;
+  return blocks;
 }
+// CSV/TSV を行×列に分解（引用符・セル内の改行に対応）
+function bulkParseRows(text,delim){
+  let rows=[],row=[],field='',inQ=false;
+  text=String(text).replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
+  for(let i=0;i<text.length;i++){
+    let ch=text[i];
+    if(inQ){
+      if(ch==='"'){if(text[i+1]==='"'){field+='"';i++;}else inQ=false;}
+      else field+=ch;
+    }else if(ch==='"'&&field===''){inQ=true;}
+    else if(ch===delim){row.push(field);field='';}
+    else if(ch==='\n'){row.push(field);rows.push(row);row=[];field='';}
+    else field+=ch;
+  }
+  row.push(field);rows.push(row);
+  return rows.filter(function(r){return r.some(function(c){return String(c).trim()!=='';});});
+}
+function bulkParse(text,tab){
+  let res={items:[],errors:[],warnings:[]};
+  function add(r,label){
+    if(r.err){res.errors.push(label+': '+r.err);return;}
+    res.items.push({q:r.q,deck:r.deck});
+    r.warn.forEach(function(w){res.warnings.push(label+': '+w);});
+  }
+  if(tab!=='csv'){
+    bulkTextBlocks(text).forEach(function(b,i){add(bulkBuild(b.f,b.tts),(i+1)+'問目（'+b.line+'行目）');});
+    return res;
+  }
+  let first=String(text).split('\n').filter(function(l){return l.trim();})[0]||'';
+  let delim=(first.indexOf('\t')>=0&&first.split('\t').length>=first.split(',').length)?'\t':',';
+  let rows=bulkParseRows(text,delim);
+  if(!rows.length)return res;
+  let keys=rows[0].map(bulkFieldKey);
+  if(keys.indexOf('q')>=0){   // 見出し行あり：列の名前で読み取る
+    rows.slice(1).forEach(function(r,ri){
+      let f={},tts=[];
+      keys.forEach(function(k,ci){
+        if(!k)return;let v=r[ci]==null?'':r[ci];
+        if(k==='tts')tts=tts.concat(String(v).split(/\|\||\n/));else f[k]=v;
+      });
+      add(bulkBuild(f,tts),(ri+2)+'行目');
+    });
+  }else{   // 見出し行なし（従来形式）：問題, 選択肢…, 正解(A/B…), 解説
+    rows.forEach(function(r,ri){
+      let cols=r.map(function(c){return String(c).trim();});
+      let ansCol=-1;
+      for(let i=cols.length-1;i>=1;i--){if(/^[A-Pa-p]$/.test(cols[i])){ansCol=i;break;}}
+      if(ansCol<0){res.errors.push((ri+1)+'行目: 正解の列（A〜Pの1文字）が見つかりません。見出し行を付けるか、従来の並び（問題,選択肢…,正解,解説）にしてください');return;}
+      let f={q:cols[0],ans:cols[ansCol],expl:ansCol+1<cols.length?cols[ansCol+1]:''};
+      let n=0;for(let i=1;i<ansCol;i++)if(cols[i]){f['c:'+ABC[n]]=cols[i];n++;}
+      add(bulkBuild(f,[]),(ri+1)+'行目');
+    });
+  }
+  return res;
+}
+function parseBulkText(text){return bulkParse(text,'text');}
+function parseBulkCSV(text){return bulkParse(text,'csv');}
+function bulkFindDeck(name){
+  let hit=null;Object.keys(DECKS).forEach(function(id){if(!hit&&DECKS[id]&&DECKS[id].name===name)hit=id;});
+  return hit||createDeck(name);
+}
+const BULK_SAMPLE_TEXT=[
+'Q: 光合成が行われる場所はどこか？','A: 細胞膜','B: 葉緑体','C: ミトコンドリア','D: 核','ANS: B','EXPL: 葉緑体のチラコイド膜で光エネルギーを吸収する','SUBJ: 生物','DIFF: 基礎','TAGS: 光合成, 細胞','---',
+'TYPE: multi','Q: 正しいものをすべて選べ。','A: 水は1気圧で100℃で沸騰する','B: 氷は水に沈む','C: 水は4℃で密度が最大になる','ANS: A, C','---',
+'TYPE: text','Q: 日本の首都はどこか？','ANS: 東京','ALT: とうきょう | Tokyo','SCORING: keyword','POINT: 東京','SUBJ: 地理総合','---',
+'TYPE: sort','Q: 次の時代を古い順に並べよ。','ITEMS: 古代 | 中世 | 近世 | 近代','SUBJ: 日本史','DIFF: 標準','DECK: 日本史まとめ'
+].join('\n');
+const BULK_SAMPLE_CSV=[
+'形式,問題,A,B,C,D,正解,別解,項目,解説,教科,難易度,タグ,デッキ',
+'choice,光合成が行われる場所はどこか？,細胞膜,葉緑体,ミトコンドリア,核,B,,,葉緑体で行われる,生物,基礎,光合成,',
+'multi,正しいものをすべて選べ。,ア,イ,ウ,エ,"A,C",,,,物理,標準,,',
+'text,日本の首都はどこか？,,,,,東京,とうきょう|Tokyo,,,地理総合,基礎,,',
+'sort,次の時代を古い順に並べよ。,,,,,,,古代|中世|近世|近代,,日本史,標準,,日本史まとめ'
+].join('\n');
+const BULK_HELP_TEXT={
+text:'【書き方】1問ごとに「項目名: 内容」の行を並べます。問題は Q: から始め、問題と問題の間に --- を入れると確実です（TYPE: を Q: より前に書くときは --- が必要）。長い文章は次の行に続けて書けます。\n\n共通: Q:問題文 / EXPL:解説 / SUBJ:教科 / DIFF:基礎・標準・応用・難関 / TAGS:タグ,タグ / DECK:デッキ名（無ければ作成）/ VERTICAL:none・q・both（横書き・問題のみ縦書き・問題＋選択肢縦書き）\n\n■選択（TYPE: choice）A:〜 B:〜（A〜Pまで）、ANS: B\n■複数選択（TYPE: multi）A:〜 B:〜、ANS: A, C\n■記述（TYPE: text）ANS:模範解答、ALT:別解 | 別解、SCORING: manual / keyword / ai、POINT:採点キーワード（キーワード採点では必須）\n■並べ替え（TYPE: sort）ITEMS: 正しい順に 項目 | 項目 | 項目（2〜8個。1行ずつ書いてもOK）\n\n読み上げ: TTS: 女性A: 読み上げる文（複数行可。女性A/女性B/男性A/男性B）/ TTSLANG: 日本語・英語・英語UK / TTSRATE: 0.5〜2.0 / TTSPAUSE: 0〜5 / TTSOFF: はい（読み上げを使わない）\n\nTYPE を省略すると、選択肢があれば選択（正解が複数なら複数選択）、ITEMS があれば並べ替え、ANS だけなら記述として扱います。日本語の項目名も使えます（問題・形式・正解・解説・教科・難易度・タグ・別解・項目 など）。教科が一覧にないときは「その他」、難易度が不明なときは「標準」になります。画像は一括インポートでは付けられません。',
+csv:'【書き方】1行目に見出し行を書くと、全形式・全項目を指定できます。見出しは次の名前が使えます（日本語・英語どちらも可）。\n\n形式(type) / 問題(q) / A〜P（選択肢） / 正解(ans) / 別解(alt) / 項目(items) / 解説(expl) / 教科(subj) / 難易度(diff) / タグ(tags) / デッキ(deck) / 採点(scoring) / 採点ポイント(point) / 縦書き(vertical) / 読み上げ(tts) / 読み上げ言語 / 読み上げ速度 / 読み上げ間隔 / 読み上げなし\n\n・使う列だけ書けばOKです。列の順番は自由です。\n・形式は choice（選択）/ multi（複数選択）/ text（記述）/ sort（並べ替え）。省略すると内容から判断します。\n・複数選択の正解は "A,C" のように引用符で囲みます。\n・別解・項目・タグは | で区切ります（例: 古代|中世|近世|近代）。\n・読み上げが複数あるときは || で区切ります（例: 女性A:こんにちは||男性A:はい）。\n・セルの中に改行やカンマを入れるときは "…" で囲みます。\n・Excelやスプレッドシートからコピーしたタブ区切りも貼り付けられます。\n\n見出し行がない従来の並び（問題,選択肢A,選択肢B,…,正解,解説）も、これまで通り読み込めます。'
+};
 
 /* ===== Render ===== */
 function render(){
@@ -1310,7 +1649,7 @@ function vHome(){
   h+='<div class="grid2"><div class="card" style="cursor:pointer;text-align:center" onclick="openCreate()"><div style="font-size:30px;margin-bottom:6px">✏️</div><div style="font-weight:700;margin-bottom:4px">問題を作成</div><div style="font-size:12px;color:let(--text3)">選択・記述・穴埋め等</div></div>';
   h+='<div class="card" style="cursor:pointer;text-align:center" onclick="navTo(\'bank\')"><div style="font-size:30px;margin-bottom:6px">🗂️</div><div style="font-weight:700;margin-bottom:4px">問題バンク</div><div style="font-size:12px;color:let(--text3)">'+Q.length+'問 保存済み</div></div></div>';
   h+='<div class="card"><div style="font-weight:700;margin-bottom:10px">📦 データ管理</div><div class="grid2"><button class="btn btn-full" onclick="exportJSON()" '+(Q.length===0?'disabled':'')+'>⬇️ エクスポート</button><button class="btn btn-full" onclick="triggerImport()">⬆️ インポート</button></div>';
-  h+='<button class="btn btn-full" style="margin-top:8px" onclick="mod=\'bulk\';bulkText=\'\';render()">📋 一括インポート</button></div>';
+  h+='<button class="btn btn-full" style="margin-top:8px" onclick="mod=\'bulk\';bulkText=\'\';bulkReport=null;render()">📋 一括インポート</button></div>';
   if(Q.length>0){
     h+='<div class="card"><div style="font-weight:700;margin-bottom:12px">クイズを始める</div>';
     h+='<div class="mode-tabs"><button class="mode-tab'+(!examMode?' on':'')+'" onclick="examMode=false;render()">📝 通常</button><button class="mode-tab'+(examMode?' on':'')+'" onclick="examMode=true;render()">📋 試験</button></div>';
@@ -1342,6 +1681,9 @@ function matchSearch(q, srch){
   return false;
 }
 function bankFilter(){
+  let ord=new Map();Q.forEach(function(q,i){ord.set(q,i);});
+  // 旧形式の数値ID（作成時刻）か、新形式（UUIDなど）か
+  function numId(q){let id=q._id;if(typeof id==='number'&&isFinite(id))return id;if(typeof id==='string'&&/^\d{9,}$/.test(id))return Number(id);return null;}
   return Q.filter(function(q){
     if(fsubj.length&&fsubj.indexOf(q.subj)<0)return false;
     if(fbookmarkOnly&&!BOOKMARKS[q._id])return false;
@@ -1349,10 +1691,16 @@ function bankFilter(){
     return true;
   }).slice().sort(function(a,b){
     let c;
-    if(fsort==='subj')c=a.subj.localeCompare(b.subj,'ja');
+    if(fsort==='subj')c=String(a.subj||'').localeCompare(String(b.subj||''),'ja');
     else if(fsort==='diff')c=DIFF.indexOf(a.diff)-DIFF.indexOf(b.diff);
     else if(fsort==='bookmark')c=(BOOKMARKS[b._id]?1:0)-(BOOKMARKS[a._id]?1:0);
-    else c=(b._id||0)-(a._id||0);
+    else{   // 追加順（新しい順）。数値IDは作成時刻、それ以外は追加した順（配列の後ろほど新しい）
+      let na=numId(a),nb=numId(b);
+      if(na!==null&&nb!==null)c=nb-na;
+      else if(na!==null)c=1;
+      else if(nb!==null)c=-1;
+      else c=ord.get(b)-ord.get(a);
+    }
     return fsortRev?-c:c;
   });
 }
@@ -2534,6 +2882,7 @@ function vSettings(){
   h+='<div class="card" style="margin-top:14px">';
   h+='<div class="settings-section"><div class="settings-title">表示</div>';
   h+='<div class="toggle-row"><span>ダークモード 🌙</span><label class="toggle-switch"><input type="checkbox" '+(SETTINGS.dark?'checked':'')+' onchange="toggleDark()"><span class="toggle-slider"></span></label></div>';
+  h+=bgSettingsHtml();
   h+='<div style="margin-top:12px"><span class="lbl">文字サイズ</span><div class="font-size-btns">';
   [{v:'small',l:'小'},{v:'medium',l:'中'},{v:'large',l:'大'},{v:'xlarge',l:'特大'}].forEach(function(fs){
     h+='<button class="font-size-btn'+(SETTINGS.fontSize===fs.v?' on':'')+'" onclick="setFontSize(\''+fs.v+'\')">'+fs.l+'</button>';
@@ -2909,6 +3258,10 @@ function calNextMonth(){
 function mFormHeader(q,t){
   let h='';
   h+='<div class="sec"><span class="lbl">教科</span><select id="fs">';
+  (function(){
+    let known=false;SUBJ_GROUPS.forEach(function(g){if(g.items.indexOf(q.subj)>=0)known=true;});
+    if(q.subj&&!known)h+='<optgroup label="（旧）"><option selected>'+esc(q.subj)+'</option></optgroup>';
+  })();
   SUBJ_GROUPS.forEach(function(g){h+='<optgroup label="'+esc(g.label)+'">';g.items.forEach(function(s){h+='<option'+(q.subj===s?' selected':'')+'>'+s+'</option>';});h+='</optgroup>';});
   h+='</select></div>';
   h+='<div class="sec"><span class="lbl">難易度</span><div class="rrow" id="fd">'+DIFF.map(function(d){return'<button type="button" class="rb'+(q.diff===d?' on':'')+'" data-rb="fd">'+d+'</button>';}).join('')+'</div></div>';
@@ -3193,14 +3546,47 @@ function choicesWrap(cnum,curCs,ansArr,t,curCsImgs){
     (curCsImgs.filter(Boolean).length?'<div style="font-size:11px;color:let(--ai-text);margin-top:4px">💡 画像付き選択肢は問題バンクとクイズ画面に表示されます</div>':'');
 }
 
+function bulkReportHtml(){
+  if(!bulkReport)return '';
+  return '<div class="bulk-report '+bulkReport.kind+'">'+esc(bulkReport.msg)+'</div>';
+}
+function bulkShowReport(kind,msg){
+  bulkReport={kind:kind,msg:msg};
+  let el=$('bulk-report-wrap');if(el)el.innerHTML=bulkReportHtml();
+}
+function bulkFillSample(){bulkText=(bulkTab==='csv'?BULK_SAMPLE_CSV:BULK_SAMPLE_TEXT);bulkReport=null;render();}
 function mBulk(){
-  let h='<div class="mh">📋 一括インポート</div><div class="tab-row"><button class="tab-btn'+(bulkTab==='text'?' on':'')+'" onclick="bulkTab=\'text\';render()">テキスト形式</button><button class="tab-btn'+(bulkTab==='csv'?' on':'')+'" onclick="bulkTab=\'csv\';render()">CSV形式</button></div>';
-  if(bulkTab==='text')h+='<div style="font-size:12px;color:let(--text3);margin-bottom:8px;line-height:1.8">Q: 問題文<br>A: 〜　B: 〜　（選択肢）<br>ANS: A　EXPL: 解説<br>空行で問題を区切る</div><textarea id="bulk-input" class="bulk-textarea" oninput="bulkText=this.value" placeholder="Q: 光合成が行われる場所はどこか？&#10;A: 細胞膜&#10;B: 葉緑体&#10;C: ミトコンドリア&#10;D: 核&#10;ANS: B&#10;EXPL: 葉緑体のチラコイド膜で光エネルギーを吸収する">'+esc(bulkText)+'</textarea>';
-  else h+='<div style="font-size:12px;color:let(--text3);margin-bottom:8px;line-height:1.8">問題,選択肢A,選択肢B,...,正解(A/B/...),解説</div><textarea id="bulk-input" class="bulk-textarea" oninput="bulkText=this.value" placeholder="光合成の場所は？,細胞膜,葉緑体,ミトコンドリア,核,B,葉緑体のチラコイド膜で行われる">'+esc(bulkText)+'</textarea>';
-  h+='<div class="row-end"><button class="btn" onclick="mod=null;render()">キャンセル</button><button class="btn btn-p" onclick="doBulkImport()">インポート</button></div>';
+  let isCsv=bulkTab==='csv';
+  let h='<div class="mh">📋 一括インポート</div><div class="tab-row"><button class="tab-btn'+(!isCsv?' on':'')+'" onclick="bulkTab=\'text\';render()">テキスト形式</button><button class="tab-btn'+(isCsv?' on':'')+'" onclick="bulkTab=\'csv\';render()">CSV形式</button></div>';
+  h+='<details class="bulk-help"><summary>書き方（選択・複数選択・記述・並べ替えに対応）</summary><pre>'+esc(BULK_HELP_TEXT[isCsv?'csv':'text'])+'</pre><button type="button" class="btn btn-sm" onclick="bulkFillSample()">サンプルを入力欄に入れる</button></details>';
+  let ph=(isCsv?BULK_SAMPLE_CSV.split('\n').slice(0,3).join('\n'):BULK_SAMPLE_TEXT.split('---')[0].trim());
+  h+='<textarea id="bulk-input" class="bulk-textarea" oninput="bulkText=this.value" placeholder="'+esc(ph).replace(/\n/g,'&#10;')+'">'+esc(bulkText)+'</textarea>';
+  h+='<div id="bulk-report-wrap">'+bulkReportHtml()+'</div>';
+  h+='<div class="row-end bulk-actions"><button class="btn" onclick="mod=null;render()">キャンセル</button><button class="btn" onclick="doBulkImport(true)">確認のみ</button><button class="btn btn-p" onclick="doBulkImport()">インポート</button></div>';
   return h;
 }
-function doBulkImport(){let text=$('bulk-input')?$('bulk-input').value:'';if(!text.trim()){showFormError('テキストを入力してください');return;}let results=bulkTab==='csv'?parseBulkCSV(text):parseBulkText(text);if(!results.length){showFormError('問題を読み取れませんでした');return;}Q=Q.concat(results);saveData();mod=null;render();showToast(results.length+'問をインポートしました！','ok');}
+function bulkSummary(items){
+  let cnt={};items.forEach(function(r){cnt[r.q.type]=(cnt[r.q.type]||0)+1;});
+  return Object.keys(BULK_TYPE_LABEL).filter(function(k){return cnt[k];}).map(function(k){return BULK_TYPE_LABEL[k]+cnt[k];}).join('／');
+}
+function doBulkImport(checkOnly){
+  let text=$('bulk-input')?$('bulk-input').value:bulkText;
+  bulkText=text;
+  if(!text.trim()){showFormError('テキストを入力してください');return;}
+  let res=bulkParse(text,bulkTab);
+  if(res.errors.length){
+    let msg='⚠️ '+res.errors.length+'件の問題が読み取れませんでした。直してからもう一度お試しください（今回は何も追加していません）。\n\n'+res.errors.slice(0,20).join('\n')+(res.errors.length>20?'\n…ほか'+(res.errors.length-20)+'件':'');
+    if(res.items.length)msg+='\n\n（問題なく読めたのは'+res.items.length+'問です）';
+    bulkShowReport('err',msg);return;
+  }
+  if(!res.items.length){bulkShowReport('err','問題を読み取れませんでした。「書き方」を開いて形式を確認してください。');return;}
+  let wmsg=res.warnings.length?'\n\n注意:\n'+res.warnings.slice(0,10).join('\n')+(res.warnings.length>10?'\n…ほか'+(res.warnings.length-10)+'件':''):'';
+  if(checkOnly){bulkShowReport('ok','✅ '+res.items.length+'問を読み取れました（'+bulkSummary(res.items)+'）。「インポート」を押すと追加します。'+wmsg);return;}
+  res.items.forEach(function(r){Q.push(r.q);if(r.deck)Q_DECKS[r.q._id]=bulkFindDeck(r.deck);});
+  dbSet('quiz_qdecks',Q_DECKS);
+  saveData();mod=null;bulkReport=null;render();
+  showToast(res.items.length+'問をインポートしました！'+(res.warnings.length?'（注意'+res.warnings.length+'件）':''),'ok');
+}
 
 function upPrev(sid,pid){let s=$(sid),p=$(pid);if(!s||!p)return;p.innerHTML=renderMath(s.value);}
 // 複数画像配列をHTMLにレンダリングするヘルパー

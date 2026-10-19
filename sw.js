@@ -1,6 +1,6 @@
 // 大学受験対策クイズ Service Worker（オフライン対応）
 // index.html などを更新したら、下の VERSION を変えるとキャッシュが入れ替わります
-const VERSION = 'v15';
+const VERSION = 'v19';
 const CACHE = 'quiz-app-' + VERSION;
 const ASSETS = [
   './',
